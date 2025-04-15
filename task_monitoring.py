@@ -170,20 +170,21 @@ def poll_slurm_jobs() -> None:
       slurm_job_id = int(job["slurm_job_id"])
       monitordb_job_status = job["slurm_job_status"]
       slurm_job_status_metadata = get_current_slurm_job_metadata_by_id(slurm_job_id)
+      current_slurm_job_status = slurm_job_status_metadata['state']
       # print(f'poll: testing {slurm_job_id}')
       if not slurm_job_status_metadata:
         remove_job_from_monitor_db(slurm_job_id)
         continue
-      if monitordb_job_status != slurm_job_status_metadata['state']:
-        new_slurm_job_status = slurm_job_status_metadata['state'] if slurm_job_status_metadata['state'] in SLURM_STATUS_KEYS else 'Unknown'
+      if monitordb_job_status != current_slurm_job_status:
+        new_slurm_job_status = current_slurm_job_status if current_slurm_job_status in SLURM_STATUS_KEYS else 'Unknown'
         update_job_status_in_monitor_db(slurm_job_id, new_slurm_job_status)
         if new_slurm_job_status in ['COMPLETED', 'FAILED', 'CANCELLED']:
-          print(f"Job {slurm_job_id} status updated to {new_slurm_job_status}")
-          send_status_update_to_notification_queue(slurm_job_id, new_slurm_job_status)
+          print(f"Job {slurm_job_id} status updated from {monitordb_job_status} to {new_slurm_job_status}")
+          send_status_update_to_notification_queue(slurm_job_id, monitordb_job_status, new_slurm_job_status)
   except pymongo.errors.PyMongoError as err:
     print(f"Error polling SLURM jobs: {err}")
 
-def send_status_update_to_notification_queue(slurm_job_id: int, new_slurm_job_status: str) -> None:
+def send_status_update_to_notification_queue(slurm_job_id: int, old_slurm_job_status: str, new_slurm_job_status: str) -> None:
   # send a message to the notifications queue
   pass
   # this is a placeholder function
