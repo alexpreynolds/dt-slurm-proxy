@@ -1,4 +1,5 @@
 import os
+import pymongo
 import paramiko
 
 '''
@@ -16,6 +17,24 @@ SSH_USERNAME = "areynolds"
 SSH_HOSTNAME = "tools0.altiusinstitute.org"
 SSH_PRIVATE_KEY_PATH = os.path.expanduser(f'/Users/{SSH_USERNAME}/.ssh/id_ed25519')
 SSH_KEY = paramiko.Ed25519Key.from_private_key_file(SSH_PRIVATE_KEY_PATH)
+
+'''
+Mongodb connection
+'''
+MONGODB_CLIENT = pymongo.MongoClient('mongodb://localhost:27017/', serverSelectionTimeoutMS=1000)
+MONGODB_MONITOR_DB = MONGODB_CLIENT['monitordb']
+MONGODB_JOBS_COLLECTION = MONGODB_MONITOR_DB['jobs']
+
+try:
+  MONGODB_CLIENT.admin.command('ping')
+  print("MongoDB connection successful")
+except pymongo.errors.ConnectionFailure as e:
+  print(f"MongoDB connection failed: {e}")
+
+'''
+How frequently to poll the SLURM scheduler for job status updates.
+'''
+POLLING_INTERVAL = 1 # in minutes
 
 '''
 SLURM test parameters

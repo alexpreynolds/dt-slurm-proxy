@@ -1,10 +1,21 @@
 import os
 import paramiko
-from task_monitoring import monitor_job
-from flask import Blueprint, request, Response, json, stream_with_context
-from constants import SSH_USERNAME, SSH_HOSTNAME, SSH_KEY, TASK_DESCRIPTION, BAD_SLURM_JOB_ID
+from task_monitoring import monitor_new_slurm_job
+from flask import (Blueprint,
+                   request,
+                   Response,
+                   json,
+                   stream_with_context,
+                   )
+from constants import (SSH_USERNAME,
+                       SSH_HOSTNAME,
+                       SSH_KEY,
+                       TASK_DESCRIPTION,
+                       BAD_SLURM_JOB_ID,
+                       )
 
-SSH_CLIENT = None
+SSH_CLIENT = paramiko.SSHClient()
+SSH_CLIENT.set_missing_host_key_policy(paramiko.AutoAddPolicy())
 
 task_submission = Blueprint('task_submission', __name__)
 
@@ -49,7 +60,7 @@ def post() -> Response:
     'task': task
   }
   response = None
-  if monitor_job(job):
+  if monitor_new_slurm_job(job):
     # return the task dictionary back to the client
     response = Response(
       stream_with_context(json.dumps(task)),
@@ -71,6 +82,7 @@ input, output, and error files. Then it constructs the SLURM command using
 the parameters provided in the task dictionary. Finally, it sends the command
 to the SLURM scheduler using SSH.
 '''
+
 def submit_slurm_task(task: dict) -> int:
   cmd = define_sbatch_cmd_for_task(task)
   job_id = send_sbatch_cmd(cmd) if cmd else BAD_SLURM_JOB_ID
@@ -105,7 +117,8 @@ def define_sbatch_cmd_for_task(task: dict) -> str:
   slurm_cmd = ' '.join(slurm_cmd_comps)
   cmd_comps.append(slurm_cmd)
   # construct the full list of commands
-  cmd = ' ; '.join(cmd_comps)
+  # cmd = ' ; '.join(cmd_comps)
+  cmd = 'echo $UID'
   return cmd
 
 def define_task_cmd(task_name: str, task_params: list) -> str:
@@ -118,11 +131,8 @@ def define_task_cmd(task_name: str, task_params: list) -> str:
   return task_cmd
 
 def send_sbatch_cmd(cmd: str) -> int:
-  global SSH_CLIENT
   if not cmd:
     raise ValueError("Command cannot be empty")
-  SSH_CLIENT = paramiko.SSHClient() if not SSH_CLIENT else SSH_CLIENT
-  SSH_CLIENT.set_missing_host_key_policy(paramiko.AutoAddPolicy())
   SSH_CLIENT.connect(hostname=SSH_HOSTNAME, username=SSH_USERNAME, pkey=SSH_KEY)
   stdin, stdout, stderr = SSH_CLIENT.exec_command(cmd)
   try:
@@ -151,5 +161,6 @@ the required keys are present. The required keys are:
 
 The function returns True if all required keys are present, and False otherwise.
 '''
+
 def is_task_valid(task: dict) -> bool:
   return all([k in task for k in ['name', 'params', 'uuid', 'slurm', 'dirs']])
