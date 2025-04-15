@@ -1,9 +1,11 @@
 import paramiko
 from flask import Blueprint, request, Response, json, stream_with_context
-from constants import SSH_USERNAME, SSH_HOSTNAME, SSH_PRIVATE_KEY_PATH, SLURM_STATUS, SLURM_TEST_JOB_ID, SLURM_TEST_JOB_STATUS
+from constants import SSH_USERNAME, SSH_HOSTNAME, SSH_KEY, SLURM_STATUS, SLURM_TEST_JOB_ID, SLURM_TEST_JOB_STATUS
 
 SSH_CLIENT = None
 SLURM_STATUS_KEYS = SLURM_STATUS.keys()
+
+task_monitoring = Blueprint('task_monitoring', __name__)
 
 '''
 This module defines a Flask blueprint for task monitoring, which maintains job state via
@@ -21,7 +23,7 @@ A DELETE request takes a job id and removes the job from the database and SLURM 
 A successful DELETE response returns the job object from the original request, with 
 the job status appended.
 '''
-task_monitoring = Blueprint('task_monitoring', __name__)
+
 @task_monitoring.route('/', methods=['POST'])
 def post() -> Response:
   request_info = request.get_json(force=True)
@@ -60,10 +62,9 @@ def get_slurm_job_metadata_by_id(slurm_job_id: int) -> dict:
   # test case
   if slurm_job_id == SLURM_TEST_JOB_ID:
     return SLURM_TEST_JOB_STATUS
-  ssh_key = paramiko.Ed25519Key.from_private_key_file(SSH_PRIVATE_KEY_PATH)
   SSH_CLIENT = paramiko.SSHClient() if not SSH_CLIENT else SSH_CLIENT
   SSH_CLIENT.set_missing_host_key_policy(paramiko.AutoAddPolicy())
-  SSH_CLIENT.connect(hostname=SSH_HOSTNAME, username=SSH_USERNAME, pkey=ssh_key)
+  SSH_CLIENT.connect(hostname=SSH_HOSTNAME, username=SSH_USERNAME, pkey=SSH_KEY)
   cmd = ' '.join([str(x) for x in ["sacct", "-j", slurm_job_id, "--format=JobID,Jobname%-128,state,User,partition,time,start,end,elapsed", "--noheader", "--parsable2"]])
   stdin, stdout, stderr = SSH_CLIENT.exec_command(cmd)
   job_status_str = stdout.read().decode('utf-8').strip()
@@ -108,10 +109,9 @@ def get_slurm_jobs_metadata_by_status(slurm_job_status: str) -> dict:
   global SSH_CLIENT
   if not slurm_job_status:
     return None
-  ssh_key = paramiko.Ed25519Key.from_private_key_file(SSH_PRIVATE_KEY_PATH)
   SSH_CLIENT = paramiko.SSHClient() if not SSH_CLIENT else SSH_CLIENT
   SSH_CLIENT.set_missing_host_key_policy(paramiko.AutoAddPolicy())
-  SSH_CLIENT.connect(hostname=SSH_HOSTNAME, username=SSH_USERNAME, pkey=ssh_key)
+  SSH_CLIENT.connect(hostname=SSH_HOSTNAME, username=SSH_USERNAME, pkey=SSH_KEY)
   cmd = ' '.join([str(x) for x in ["sacct", "--state", slurm_job_status, "--format=JobID,Jobname%-128,state,User,partition,time,start,end,elapsed", "--noheader", "--parsable2"]])
   stdin, stdout, stderr = SSH_CLIENT.exec_command(cmd)
   job_status_strs = stdout.read().decode('utf-8').strip()

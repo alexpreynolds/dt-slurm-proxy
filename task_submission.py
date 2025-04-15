@@ -2,9 +2,11 @@ import os
 import paramiko
 from task_monitoring import monitor_job
 from flask import Blueprint, request, Response, json, stream_with_context
-from constants import SSH_USERNAME, SSH_HOSTNAME, SSH_PRIVATE_KEY_PATH, TASK_DESCRIPTION, BAD_SLURM_JOB_ID
+from constants import SSH_USERNAME, SSH_HOSTNAME, SSH_KEY, TASK_DESCRIPTION, BAD_SLURM_JOB_ID
 
 SSH_CLIENT = None
+
+task_submission = Blueprint('task_submission', __name__)
 
 '''
 This module defines a Flask blueprint for task submission. 
@@ -16,7 +18,7 @@ its parameters.
 
 No other HTTP methods are supported at this time.
 '''
-task_submission = Blueprint('task_submission', __name__)
+
 @task_submission.route('/', methods=['POST'])
 def post() -> Response:
   request_info = request.get_json(force=True)
@@ -119,10 +121,9 @@ def send_sbatch_cmd(cmd: str) -> int:
   global SSH_CLIENT
   if not cmd:
     raise ValueError("Command cannot be empty")
-  ssh_key = paramiko.Ed25519Key.from_private_key_file(SSH_PRIVATE_KEY_PATH)
   SSH_CLIENT = paramiko.SSHClient() if not SSH_CLIENT else SSH_CLIENT
   SSH_CLIENT.set_missing_host_key_policy(paramiko.AutoAddPolicy())
-  SSH_CLIENT.connect(hostname=SSH_HOSTNAME, username=SSH_USERNAME, pkey=ssh_key)
+  SSH_CLIENT.connect(hostname=SSH_HOSTNAME, username=SSH_USERNAME, pkey=SSH_KEY)
   stdin, stdout, stderr = SSH_CLIENT.exec_command(cmd)
   try:
     # use of '--parsable' option in sbatch command means that 

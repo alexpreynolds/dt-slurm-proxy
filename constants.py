@@ -1,4 +1,5 @@
 import os
+import paramiko
 
 '''
 This is the port number on which the Flask application will run, unless overriden 
@@ -14,6 +15,7 @@ to the SLURM scheduler, and the `SSH_HOSTNAME` is the hostname of the SLURM sche
 SSH_USERNAME = "areynolds"
 SSH_HOSTNAME = "tools0.altiusinstitute.org"
 SSH_PRIVATE_KEY_PATH = os.path.expanduser(f'/Users/{SSH_USERNAME}/.ssh/id_ed25519')
+SSH_KEY = paramiko.Ed25519Key.from_private_key_file(SSH_PRIVATE_KEY_PATH)
 
 '''
 SLURM test parameters
