@@ -1,7 +1,7 @@
 # dt-slurm-proxy
 
 This Flask application provides endpoints for submitting and monitoring 
-jobs sent to a SLURM scheduler, for the purpose of integration with an
+jobs sent to a SLURM scheduler, for the purpose of integration with a
 defined set of CLI tools.
 
 ## Python
