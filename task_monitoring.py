@@ -60,6 +60,10 @@ def post() -> Response:
     )
   return response
 
+'''
+CRUD operations for the job monitoring database.
+'''
+
 def monitor_new_slurm_job(job: dict) -> bool:
   slurm_job_id = int(job['slurm_job_id'])
   slurm_job_status_metadata = get_current_slurm_job_metadata_by_id(slurm_job_id)

@@ -34,7 +34,7 @@ except pymongo.errors.ConnectionFailure as e:
 '''
 How frequently to poll the SLURM scheduler for job status updates.
 '''
-POLLING_INTERVAL = 1 # in minutes
+MONITOR_POLLING_INTERVAL = 1 # in minutes
 
 '''
 SLURM test parameters
