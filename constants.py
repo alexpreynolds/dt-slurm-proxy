@@ -1,4 +1,5 @@
 import os
+import sys
 import pymongo
 import paramiko
 
@@ -27,9 +28,10 @@ MONGODB_JOBS_COLLECTION = MONGODB_MONITOR_DB['jobs']
 
 try:
   MONGODB_CLIENT.admin.command('ping')
-  print("MongoDB connection successful")
-except pymongo.errors.ConnectionFailure as e:
-  print(f"MongoDB connection failed: {e}")
+  print(" * MongoDB connection successful")
+except pymongo.errors.ConnectionFailure as err:
+  print(f" * MongoDB connection failed: {err}")
+  sys.exit(-1)
 
 '''
 How frequently to poll the SLURM scheduler for job status updates.

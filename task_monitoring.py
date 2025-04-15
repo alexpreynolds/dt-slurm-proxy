@@ -88,7 +88,7 @@ def add_job_to_monitor_db(slurm_job_id: int, slurm_job_status: str, slurm_job_ta
       jobs_coll.insert_one(job)
     return True
   except pymongo.errors.PyMongoError as err:
-    print(f"Error adding job to monitor database: {err}")
+    print(f" * Error adding job to monitor database: {err}")
     return False
 
 def get_job_metadata_from_monitor_db(slurm_job_id: int) -> dict:
@@ -106,7 +106,7 @@ def get_job_metadata_from_monitor_db(slurm_job_id: int) -> dict:
     else:
       return None
   except pymongo.errors.PyMongoError as err:
-    print(f"Error retrieving job information from monitor database: {err}")
+    print(f" * Error retrieving job information from monitor database: {err}")
     return None
   
 def update_job_status_in_monitor_db(slurm_job_id: int, new_slurm_job_status: str) -> bool:
@@ -121,7 +121,7 @@ def update_job_status_in_monitor_db(slurm_job_id: int, new_slurm_job_status: str
       return False
     return True
   except pymongo.errors.PyMongoError as err:
-    print(f"Error updating job status in monitor database: {err}")
+    print(f" * Error updating job status in monitor database: {err}")
     return False
 
 def remove_job_from_monitor_db(slurm_job_id: int) -> bool:
@@ -133,7 +133,7 @@ def remove_job_from_monitor_db(slurm_job_id: int) -> bool:
       return False
     return True
   except pymongo.errors.PyMongoError as err:
-    print(f"Error removing job from monitor database: {err}")
+    print(f" * Error removing job from monitor database: {err}")
     return False
 
 def get_current_slurm_job_metadata_by_id(slurm_job_id: int) -> dict:
@@ -161,8 +161,8 @@ For each job, get the current status from SLURM.
 If the job is not found in SLURM, remove it from the database.
 If the job is found, compare the status in SLURM with the status in the database.
 If the SLURM and monitor database statuses are different:
-  1. Update the status in the monitor database.
-  2. If completed or terminated, also send a message to notifications queue(s).
+  1. If completed or terminated, send a message to notifications queue(s).
+  2. Delete the job from the database, if complete. Else, update job status in the database.
 If they are the same, do nothing.
 '''
 
@@ -181,15 +181,19 @@ def poll_slurm_jobs() -> None:
         continue
       if monitordb_job_status != current_slurm_job_status:
         new_slurm_job_status = current_slurm_job_status if current_slurm_job_status in SLURM_STATUS_KEYS else 'Unknown'
-        update_job_status_in_monitor_db(slurm_job_id, new_slurm_job_status)
         if new_slurm_job_status in ['COMPLETED', 'FAILED', 'CANCELLED']:
-          print(f"Job {slurm_job_id} status updated from {monitordb_job_status} to {new_slurm_job_status}")
+          print(f" * Job {slurm_job_id} status updated from {monitordb_job_status} to {new_slurm_job_status}")
           send_status_update_to_notification_queue(slurm_job_id, monitordb_job_status, new_slurm_job_status)
+        if new_slurm_job_status in ['COMPLETED']:
+          print(f" * Job {slurm_job_id} is completed. Removing from monitor database so that it is no longer tracked.")
+          remove_job_from_monitor_db(slurm_job_id)
+        else:
+          update_job_status_in_monitor_db(slurm_job_id, new_slurm_job_status)
   except pymongo.errors.PyMongoError as err:
-    print(f"Error polling SLURM jobs: {err}")
+    print(f" * Error polling SLURM jobs: {err}")
 
 def send_status_update_to_notification_queue(slurm_job_id: int, old_slurm_job_status: str, new_slurm_job_status: str) -> None:
-  # send a message to the notifications queue
+  # send a message to the notification queue
   pass
   # this is a placeholder function
 
@@ -252,7 +256,7 @@ def get_by_slurm_status(slurm_status: str) -> Response:
 
 @task_monitoring.route('/slurm_job_id/<slurm_job_id>', methods=['DELETE'])
 def delete(slurm_job_id: int) -> Response:
-  print(f'slurm_job_id={slurm_job_id}')
+  # print(f'slurm_job_id={slurm_job_id}')
   # only delete the job from the SLURM scheduler if it was already in the database (i.e. submitted)
   # delete the job from the database
   # return the job object

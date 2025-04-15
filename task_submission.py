@@ -85,6 +85,9 @@ to the SLURM scheduler using SSH.
 
 def submit_slurm_task(task: dict) -> int:
   cmd = define_sbatch_cmd_for_task(task)
+  if not cmd: 
+    print(" * Failed to define sbatch command")
+    return BAD_SLURM_JOB_ID
   job_id = send_sbatch_cmd(cmd) if cmd else BAD_SLURM_JOB_ID
   return job_id
 
@@ -113,17 +116,18 @@ def define_sbatch_cmd_for_task(task: dict) -> str:
   slurm_cmd_comps.append(f"--partition={slurm_comps['partition']}")
   if slurm_comps['time']: slurm_cmd_comps.append(f"--time={slurm_comps['time']}")
   task_cmd = define_task_cmd(task['name'], task['params'])
+  if not task_cmd: return None
   slurm_cmd_comps.append(f"--wrap=\'{task_cmd}\'")
   slurm_cmd = ' '.join(slurm_cmd_comps)
   cmd_comps.append(slurm_cmd)
-  # construct the full list of commands
-  # cmd = ' ; '.join(cmd_comps)
-  cmd = 'echo $UID'
+  # construct and return the full set of commands
+  cmd = ' ; '.join(cmd_comps)
   return cmd
 
 def define_task_cmd(task_name: str, task_params: list) -> str:
   if task_name not in TASK_DESCRIPTION:
-    raise ValueError(f"Task {task_name} is not defined")
+    print(f" * Task {task_name} is not defined")
+    return None
   task_cmd = [TASK_DESCRIPTION[task_name]['cmd']]
   for param in task_params:
     task_cmd.append(param)
@@ -142,10 +146,10 @@ def send_sbatch_cmd(cmd: str) -> int:
     # if there is any output sent to standard error, log it as a failure
     stderr_val = stderr.read().decode('utf-8')
     if stderr_val:
-      print(stderr_val)
+      print(f' * Failed sbatch submit: {stderr_val}')
       return BAD_SLURM_JOB_ID
   except ValueError as err:
-    print(f"Error: {err}")
+    print(f" * Error: {err}")
     return BAD_SLURM_JOB_ID
   return job_id
 

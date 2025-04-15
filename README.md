@@ -10,6 +10,7 @@ defined set of CLI tools.
 virtualenv --python=python3.9 .venv
 source .venv/bin/activate
 pip install -r requirements.txt
+python app.py
 ```
 
 ## Docker container
