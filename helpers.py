@@ -7,7 +7,6 @@ from flask import (
     stream_with_context,
 )
 
-
 def ssh_client() -> paramiko.SSHClient:
     """
     Create an SSH client to connect to the SLURM scheduler.
@@ -40,13 +39,12 @@ def ssh_client_exec(ssh_client: paramiko.SSHClient, cmd: str) -> tuple:
         SSH_USERNAME,
         SSH_KEY,
     )
-
     ssh_client.connect(
         hostname=SSH_HOSTNAME,
         username=SSH_USERNAME,
         pkey=SSH_KEY,
         look_for_keys=False,
-        allow_agent=False,
+        allow_agent=True,
         timeout=10,
     )
     return ssh_client.exec_command(cmd)

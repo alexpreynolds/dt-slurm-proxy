@@ -52,7 +52,11 @@ MONGODB_CLIENT = pymongo.MongoClient(
 )
 MONGODB_MONITOR_DB = MONGODB_CLIENT["monitordb"]
 MONGODB_JOBS_COLLECTION = MONGODB_MONITOR_DB["jobs"]
-ping_mongodb_client(MONGODB_CLIENT, MONGODB_URI)
+
+def init_mongodb():
+    ping_mongodb_client(MONGODB_CLIENT, MONGODB_URI)
+
+init_mongodb()
 
 """
 How frequently to poll the SLURM scheduler for job status updates.
