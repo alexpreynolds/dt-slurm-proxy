@@ -9,7 +9,6 @@ parent, root = file.parent, file.parents[1]
 sys.path.append(str(root))
 from task_submission import task_submission
 
-
 class TestTaskSubmission(unittest.TestCase):
     def setUp(self):
         self.app = Flask(__name__)
@@ -18,7 +17,7 @@ class TestTaskSubmission(unittest.TestCase):
 
     def test_index_with_data(self):
         # Send a POST request with valid JSON data
-        data = {
+        test_data = {
             "task": {
                 "dirs": {
                     "error": "/home/areynolds/dt-slurm-proxy/error",
@@ -36,18 +35,18 @@ class TestTaskSubmission(unittest.TestCase):
                     "partition": "queue1",
                     "time": "00:30:00",
                 },
-                "name": "hello_world",
+                "name": "echo_hello_world",
                 "params": [
                     "-e",
-                    "'Hello world!\n'",
+                    "\"Hello world!\t(sent to $USER)\n\"",
                 ],
                 "uuid": "123e4567-e89b-12d3-a456-426614174000",
             }
         }
-        response = self.client.post("/", json=data)
+        response = self.client.post("/", json=test_data)
         self.assertEqual(response.status_code, 200)
-        # Response should mirror back the sent JSON
-        self.assertEqual(response.get_json(), data["task"])
+        # Response should mirror back the sent JSON task uuid
+        self.assertEqual(response.get_json(), {"uuid": test_data["task"]["uuid"]})
 
     def test_index_without_data(self):
         # Send a POST request without any JSON data

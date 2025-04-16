@@ -1,44 +1,63 @@
 import os
-import sys
 import pymongo
 import paramiko
+from enum import Enum
+from helpers import ping_mongodb_client
 
 """
-This is the port number on which the Flask application will run, unless overriden 
-by the environment variable `PORT`.
+Application name and port
 """
-APP_PORT = 5001
+APP_NAME = os.environ.get("NAME", "dt-slurm-proxy")
+APP_PORT = os.environ.get("PORT", 5001)
+
+"""
+These parameters are used to define the tasks that can be submitted to the SLURM scheduler
+through this proxy. 
+
+The `cmd` parameter is the command that will be executed on the host submitting a job to 
+the SLURM scheduler. The `description` parameter is a short summary of the task.
+"""
+TASK_DESCRIPTION = {
+    "echo_hello_world": {
+        "cmd": "echo",
+        "default_params": [],
+        "description": "Prints a generic hello world! message",
+    },
+}
+
+"""
+Task submission methods
+"""
+class TaskSubmitMethods(Enum):
+    SSH = 1
+    REST = 2
 
 """
 These parameters are used to connect to the SLURM scheduler via SSH. A private key is
 used to authenticate the connection. The `SSH_USERNAME` is the username used to connect
 to the SLURM scheduler, and the `SSH_HOSTNAME` is the hostname of the SLURM scheduler.
 """
-SSH_USERNAME = "areynolds"
-SSH_HOSTNAME = "tools0.altiusinstitute.org"
+SSH_USERNAME = os.environ.get("SSH_USERNAME", "areynolds")
+SSH_HOSTNAME = os.environ.get("SSH_HOSTNAME", "tools0.altiusinstitute.org")
 SSH_PRIVATE_KEY_PATH = os.path.expanduser(f"/Users/{SSH_USERNAME}/.ssh/id_ed25519")
 SSH_KEY = paramiko.Ed25519Key.from_private_key_file(SSH_PRIVATE_KEY_PATH)
 
 """
 Mongodb connection
 """
+MONGODB_URI = os.getenv("MONGODB_URI", "mongodb://localhost:27017")
 MONGODB_CLIENT = pymongo.MongoClient(
-    "mongodb://localhost:27017/", serverSelectionTimeoutMS=1000
+    MONGODB_URI,
+    serverSelectionTimeoutMS=1000,
 )
 MONGODB_MONITOR_DB = MONGODB_CLIENT["monitordb"]
 MONGODB_JOBS_COLLECTION = MONGODB_MONITOR_DB["jobs"]
-
-try:
-    MONGODB_CLIENT.admin.command("ping")
-    print(" * MongoDB connection successful")
-except pymongo.errors.ConnectionFailure as err:
-    print(f" * MongoDB connection failed: {err}")
-    sys.exit(-1)
+ping_mongodb_client(MONGODB_CLIENT, MONGODB_URI)
 
 """
 How frequently to poll the SLURM scheduler for job status updates.
 """
-MONITOR_POLLING_INTERVAL = 1  # in minutes
+MONITOR_POLLING_INTERVAL = os.environ.get("MONITOR_POLLING_INTERVAL", 1)  # in minutes
 
 """
 SLURM test parameters
@@ -92,19 +111,5 @@ SLURM_STATUS = {
     "STOPPED": {
         "code": "ST",
         "explanation": "A running job has been stopped with its cores retained.",
-    },
-}
-
-"""
-These parameters are used to define the tasks that can be submitted to the SLURM scheduler
-through this proxy. 
-
-The `cmd` parameter is the command that will be executed on the host submitting a job to 
-the SLURM scheduler. The `description` parameter is a short summary of the task.
-"""
-TASK_DESCRIPTION = {
-    "hello_world": {
-        "cmd": "echo",
-        "description": "Prints 'Hello world!'",
     },
 }

@@ -1,23 +1,22 @@
 import os
-import paramiko
-from task_monitoring import monitor_new_slurm_job
 from flask import (
     Blueprint,
     request,
     Response,
-    json,
-    stream_with_context,
+)
+from helpers import (
+    ssh_client,
+    ssh_client_exec,
+    stream_json_response,
 )
 from constants import (
-    SSH_USERNAME,
-    SSH_HOSTNAME,
-    SSH_KEY,
     TASK_DESCRIPTION,
     BAD_SLURM_JOB_ID,
+    TaskSubmitMethods,
 )
+from task_monitoring import monitor_new_slurm_job
 
-SSH_CLIENT = paramiko.SSHClient()
-SSH_CLIENT.set_missing_host_key_policy(paramiko.AutoAddPolicy())
+SSH_CLIENT = ssh_client()
 
 task_submission = Blueprint("task_submission", __name__)
 
@@ -28,70 +27,77 @@ The task is submitted via a POST request containing a JSON object with
 information about the task to be submitted, including directories for input,
 output, and error files, as well as SLURM parameters and the task name and
 its parameters.
-
-No other HTTP methods are supported at this time.
 """
+
 
 @task_submission.route("/", methods=["POST"])
 def post() -> Response:
+    """
+    POST request handler for task submission.
+    This function receives a JSON object containing task information,
+    validates the task, and submits it to the SLURM scheduler.
+    """
     request_info = request.get_json(force=True)
     task = request_info.get("task")
     if not task:
-        return Response(
-            stream_with_context(json.dumps({"Error": "No task provided"})),
-            status=400,
-            mimetype="application/json",
-        )
+        return stream_json_response({"error": "No task provided"}, 400)
     if not is_task_valid(task):
-        return Response(
-            stream_with_context(json.dumps({"Error": "Invalid task"})),
-            status=400,
-            mimetype="application/json",
-        )
-    submit_job_id = submit_slurm_task(task)
+        return stream_json_response({"error": "Invalid task format"}, 400)
+    submit_job_id = submit_slurm_task(task, TaskSubmitMethods.SSH)
     if submit_job_id == BAD_SLURM_JOB_ID:
-        return Response(
-            stream_with_context(json.dumps({"Error": "Failed to submit task"})),
-            status=400,
-            mimetype="application/json",
-        )
+        return stream_json_response({"error": "Failed to submit task"}, 400)
     # if successful, submit job metadata to the monitor service
     job = {"slurm_job_id": submit_job_id, "slurm_job_status": "Unknown", "task": task}
-    response = None
-    if monitor_new_slurm_job(job):
-        # return the task dictionary back to the client
-        response = Response(
-            stream_with_context(json.dumps(task)),
-            status=200,
-            mimetype="application/json",
-        )
+    if not monitor_new_slurm_job(job):
+        return stream_json_response({"error": "Failed to monitor job"}, 400)
+    # return the task uuid back to the client
+    return stream_json_response({"uuid": task["uuid"]}, 200)
+
+
+def submit_slurm_task(task: dict, submit_method: str) -> int:
+    """
+    Submit a task to the SLURM scheduler.
+    This function constructs the command to create the necessary directories
+    for input, output, and error files, and then constructs the SLURM command
+    using the parameters provided in the task dictionary. Finally, it sends
+    the command to the SLURM scheduler using SSH.
+
+    Args:
+        task (dict): The task dictionary containing information about the task
+            to be submitted.
+        method (str): The method to be used for task submission. Currently,
+            only SSH is supported.
+
+    Returns:
+        int: The job ID of the submitted task, or BAD_SLURM_JOB_ID if the submission
+            failed.
+    """
+    if submit_method == TaskSubmitMethods.SSH:
+        cmd = define_sbatch_cmd_for_task_via_ssh(task)
+        if not cmd:
+            print(" * Failed to define sbatch command")
+            return BAD_SLURM_JOB_ID
+        job_id = send_sbatch_cmd_via_ssh(cmd) if cmd else BAD_SLURM_JOB_ID
+        return job_id
     else:
-        response = Response(
-            stream_with_context(json.dumps({"Error": "Failed to monitor job"})),
-            status=400,
-            mimetype="application/json",
-        )
-    return response
-
-
-"""
-This function takes a task dictionary and constructs a command to submit
-the task to a SLURM scheduler. It first creates the necessary directories for
-input, output, and error files. Then it constructs the SLURM command using
-the parameters provided in the task dictionary. Finally, it sends the command
-to the SLURM scheduler using SSH.
-"""
-
-def submit_slurm_task(task: dict) -> int:
-    cmd = define_sbatch_cmd_for_task(task)
-    if not cmd:
-        print(" * Failed to define sbatch command")
+        print(f" * Unsupported task submit method: {submit_method}")
         return BAD_SLURM_JOB_ID
-    job_id = send_sbatch_cmd(cmd) if cmd else BAD_SLURM_JOB_ID
-    return job_id
 
 
-def define_sbatch_cmd_for_task(task: dict) -> str:
+def define_sbatch_cmd_for_task_via_ssh(task: dict) -> str:
+    """
+    Construct the sbatch command for the task.
+    This function creates the command to create the necessary directories
+    for input, output, and error files, and then constructs the sbatch command
+    using the parameters provided in the task dictionary.
+
+    Args:
+        task (dict): The task dictionary containing information about the task
+            to be submitted.
+
+    Returns:
+        str: The full sbatch command to be executed.
+    """
     cmd_comps = []
     # construct the command to create the directories holding the input, output, and error files
     dir_comps = task["dirs"]
@@ -132,21 +138,48 @@ def define_sbatch_cmd_for_task(task: dict) -> str:
 
 
 def define_task_cmd(task_name: str, task_params: list) -> str:
+    """
+    Construct the command for the task.
+    This function retrieves the command template for the specified task
+    and appends the parameters provided in the task dictionary.
+
+    Args:
+        task_name (str): The name of the task.
+        task_params (list): The parameters for the task.
+
+    Returns:
+        str: The full command for the task, or None if the task is not defined.
+    """
     if task_name not in TASK_DESCRIPTION:
         print(f" * Task {task_name} is not defined")
         return None
     task_cmd = [TASK_DESCRIPTION[task_name]["cmd"]]
-    for param in task_params:
-        task_cmd.append(param)
+    for default_param in TASK_DESCRIPTION[task_name]["default_params"]:
+        task_cmd.append(default_param)
+    for additional_param in task_params:
+        task_cmd.append(additional_param)
     task_cmd = " ".join(task_cmd)
     return task_cmd
 
 
-def send_sbatch_cmd(cmd: str) -> int:
+def send_sbatch_cmd_via_ssh(cmd: str) -> int:
+    """
+    Send the sbatch command to the SLURM scheduler via SSH.
+    This function connects to the SLURM scheduler using SSH and executes
+    the sbatch command. It returns the job ID of the submitted task.
+    If the command fails, it returns BAD_SLURM_JOB_ID.
+
+    Args:
+        cmd (str): The sbatch command to be executed.
+
+    Returns:
+        int: The job ID of the submitted task, or BAD_SLURM_JOB_ID if the submission
+            failed.
+    """
     if not cmd:
-        raise ValueError("Command cannot be empty")
-    SSH_CLIENT.connect(hostname=SSH_HOSTNAME, username=SSH_USERNAME, pkey=SSH_KEY)
-    stdin, stdout, stderr = SSH_CLIENT.exec_command(cmd)
+        print(f" * sbatch command is empty")
+        return BAD_SLURM_JOB_ID
+    (stdin, stdout, stderr) = ssh_client_exec(SSH_CLIENT, cmd)
     try:
         # use of '--parsable' option in sbatch command means that
         # the job id (integer) is the only thing sent to standard output
@@ -162,18 +195,16 @@ def send_sbatch_cmd(cmd: str) -> int:
     return job_id
 
 
-"""
-This function checks if the task dictionary is valid by ensuring that
-the required keys are present. The required keys are:
-
-- 'name': The name of the task.
-- 'params': The parameters for the task.
-- 'uuid': A unique identifier for the task.
-- 'slurm': A dictionary containing SLURM parameters.
-- 'dirs': A dictionary containing directories for input, output, and error files.
-
-The function returns True if all required keys are present, and False otherwise.
-"""
-
 def is_task_valid(task: dict) -> bool:
+    """
+    Validate the task dictionary.
+    This function checks if the task dictionary contains all the required
+    keys and if the values are of the expected types.
+
+    Args:
+        task (dict): The task dictionary to be validated.
+
+    Returns:
+        bool: True if the task is valid, False otherwise.
+    """
     return all([k in task for k in ["name", "params", "uuid", "slurm", "dirs"]])

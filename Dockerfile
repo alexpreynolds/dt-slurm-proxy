@@ -19,8 +19,6 @@ EXPOSE 27017
 
 COPY . /app
 
-# ENTRYPOINT [ "python" ]
-# CMD [ "app.py" ]
-
 ENTRYPOINT [ "/bin/sh" ]
+
 CMD [ "start.sh" ]

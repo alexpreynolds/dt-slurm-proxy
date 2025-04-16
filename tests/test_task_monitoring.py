@@ -8,8 +8,9 @@ from pathlib import Path
 file = Path(__file__).resolve()
 parent, root = file.parent, file.parents[1]
 sys.path.append(str(root))
-from task_monitoring import task_monitoring, get_slurm_job_metadata_by_id, monitor_job
+from task_monitoring import task_monitoring, get_current_slurm_job_metadata_by_id, monitor_new_slurm_job
 from constants import SLURM_TEST_JOB_ID
+import helpers
 
 # Language: python
 
@@ -17,8 +18,8 @@ from constants import SLURM_TEST_JOB_ID
 
 
 class TestGetSlurmJobMetadataById(unittest.TestCase):
-    @patch("task_monitoring.paramiko.SSHClient")
-    @patch("task_monitoring.paramiko.Ed25519Key")
+    @patch("helpers.paramiko.SSHClient")
+    @patch("helpers.paramiko.Ed25519Key")
     def test_get_slurm_job_metadata_success(self, mock_ed25519key, mock_sshclient):
         # Setup dummy ssh key and SSHClient instance.
         dummy_key = MagicMock()
@@ -34,7 +35,7 @@ class TestGetSlurmJobMetadataById(unittest.TestCase):
         dummy_ssh_instance.exec_command.return_value = (None, dummy_stdout, None)
 
         # Call the function under test.
-        result = get_slurm_job_metadata_by_id(SLURM_TEST_JOB_ID)
+        result = get_current_slurm_job_metadata_by_id(SLURM_TEST_JOB_ID)
         expected_keys = [
             "job_id",
             "job_name",
@@ -60,8 +61,8 @@ class TestGetSlurmJobMetadataById(unittest.TestCase):
         expected = dict(zip(expected_keys, expected_values))
         self.assertEqual(result, expected)
 
-    @patch("task_monitoring.paramiko.SSHClient")
-    @patch("task_monitoring.paramiko.Ed25519Key")
+    @patch("helpers.paramiko.SSHClient")
+    @patch("helpers.paramiko.Ed25519Key")
     def test_get_slurm_job_metadata_failure(self, mock_ed25519key, mock_sshclient):
         # Setup dummy ssh key and SSHClient instance.
         dummy_key = MagicMock()
@@ -75,7 +76,7 @@ class TestGetSlurmJobMetadataById(unittest.TestCase):
         dummy_stdout.read.return_value = b""
         dummy_ssh_instance.exec_command.return_value = (None, dummy_stdout, None)
 
-        result = get_slurm_job_metadata_by_id(456)
+        result = get_current_slurm_job_metadata_by_id(0)
         self.assertIsNone(result)
 
 
@@ -85,7 +86,7 @@ class TestPostRequest(unittest.TestCase):
         self.app.register_blueprint(task_monitoring, url_prefix="/")
         self.client = self.app.test_client()
 
-    @patch("task_monitoring.monitor_job")
+    @patch("task_monitoring.monitor_new_slurm_job")
     def test_post_success(self, mock_monitor_job):
         # Set monitor_job to return True.
         mock_monitor_job.return_value = True
