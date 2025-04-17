@@ -15,9 +15,13 @@ python app.py
 
 ## Docker container
 
+For forwarding SSH key data on macOS:
+
 ```
-docker image build -t dt-proxy-docker .
-docker run -p 5001:5001 --mount type=bind,source=/Users/areynolds,target=/Users/areynolds,readonly -d dt-proxy-docker
+docker image build -t dt-slurm-proxy-docker .
+SSH_AUTH_SOCK=`launchctl getenv SSH_AUTH_SOCK` ssh-add
+CONTAINER_ID=$(docker run -p 5001:5001 -v /run/host-services/ssh-auth.sock:/run/host-services/ssh-auth.sock:ro -e SSH_AUTH_SOCK="/run/host-services/ssh-auth.sock" -d dt-slurm-proxy-docker)
+docker logs --follow ${CONTAINER_ID}
 ```
 
 ## "Hello, world!" test request

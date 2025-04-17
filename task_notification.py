@@ -1,5 +1,6 @@
 # -*- coding: utf-8 -*-
 
+import sys
 from enum import Enum
 from functools import partial
 
@@ -49,16 +50,16 @@ class NotificationMethods:
 
         email_pattern = r"^\S+@\S+\.\S+$"
         if not re.match(email_pattern, sender):
-            print(" * Error: Invalid sender email address.")
+            print(" * Error: Invalid sender email address.", file=sys.stderr)
             return
         if not re.match(email_pattern, recipient):
-            print(" * Error: Invalid recipient email address.")
+            print(" * Error: Invalid recipient email address.", file=sys.stderr)
             return
         if not subject or subject.strip() == "":
-            print(" * Error: Invalid email subject.")
+            print(" * Error: Invalid email subject.", file=sys.stderr)
             return
         if not body or body.strip() == "":
-            print(" * Error: Invalid email body.")
+            print(" * Error: Invalid email body.", file=sys.stderr)
             return
         message = MIMEText(body)
         message["From"] = sender
@@ -72,7 +73,7 @@ class NotificationMethods:
                 server.login(NOTIFICATIONS_SMTP_USERNAME, NOTIFICATIONS_SMTP_PASSWORD)
                 server.sendmail(sender, recipient, message.as_string())
         except Exception as err:
-            print(f" * Failed to send email: {err}")
+            print(f" * Failed to send email: {err}", file=sys.stderr)
 
     @staticmethod
     def notify_via_rabbitmq(
@@ -118,7 +119,7 @@ class NotificationMethods:
         Sends a notification to a Slack channel.
         """
         if not msg:
-            print(" * Error: Empty Slack message")
+            print(" * Error: Empty Slack message", file=sys.stderr)
             return
         from constants import (
             NOTIFICATIONS_SLACK_BOT_TOKEN,
@@ -131,9 +132,9 @@ class NotificationMethods:
             client = WebClient(token=NOTIFICATIONS_SLACK_BOT_TOKEN)
             channel = NOTIFICATIONS_SLACK_CHANNEL if not channel else channel
             response = client.chat_postMessage(channel, text=msg)
-            # print(f" * Slack message sent successfully: {response['message']['text']}")
+            # print(f" * Slack message sent successfully: {response['message']['text']}", file=sys.stderr)
         except SlackApiError as err:
-            print(f" * Error: Failed to send Slack message: {err.response['error']}")
+            print(f" * Error: Failed to send Slack message: {err.response['error']}", file=sys.stderr)
 
     @staticmethod
     def notify_via_test(msg):
@@ -143,4 +144,4 @@ class NotificationMethods:
         Args:
             msg (str): The message to be sent.
         """
-        print(f" * {msg}")
+        print(f" * {msg}", file=sys.stderr)

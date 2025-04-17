@@ -1,6 +1,7 @@
 # -*- coding: utf-8 -*-
 
 import os
+import sys
 from flask import (
     Blueprint,
     request,
@@ -82,12 +83,12 @@ def submit_slurm_task(task: dict, submit_method: str) -> int:
     if submit_method == TaskSubmitMethods.SSH:
         cmd = define_sbatch_cmd_for_task_via_ssh(task)
         if not cmd:
-            print(" * Failed to define sbatch command")
+            print(" * Failed to define sbatch command", file=sys.stderr)
             return BAD_SLURM_JOB_ID
         job_id = send_sbatch_cmd_via_ssh(cmd) if cmd else BAD_SLURM_JOB_ID
         return job_id
     else:
-        print(f" * Unsupported task submit method: {submit_method}")
+        print(f" * Unsupported task submit method: {submit_method}", file=sys.stderr)
         return BAD_SLURM_JOB_ID
 
 
@@ -158,7 +159,7 @@ def define_task_cmd(task_name: str, task_params: list) -> str:
         str: The full command for the task, or None if the task is not defined.
     """
     if task_name not in TASK_METADATA:
-        print(f" * Task {task_name} is not defined")
+        print(f" * Task {task_name} is not defined", file=sys.stderr)
         return None
     task_cmd = [TASK_METADATA[task_name]["cmd"]]
     for default_param in TASK_METADATA[task_name]["default_params"]:
@@ -184,7 +185,7 @@ def send_sbatch_cmd_via_ssh(cmd: str) -> int:
             failed.
     """
     if not cmd:
-        print(f" * sbatch command is empty")
+        print(f" * sbatch command is empty", file=sys.stderr)
         return BAD_SLURM_JOB_ID
     (stdin, stdout, stderr) = ssh_client_exec(SSH_CLIENT, cmd)
     try:
@@ -194,10 +195,10 @@ def send_sbatch_cmd_via_ssh(cmd: str) -> int:
         # if there is any output sent to standard error, log it as a failure
         stderr_val = stderr.read().decode("utf-8")
         if stderr_val:
-            print(f" * Failed sbatch submit: {stderr_val}")
+            print(f" * Failed sbatch submit: {stderr_val}", file=sys.stderr)
             return BAD_SLURM_JOB_ID
     except ValueError as err:
-        print(f" * Error: {err}")
+        print(f" * Error: {err}", file=sys.stderr)
         return BAD_SLURM_JOB_ID
     return job_id
 

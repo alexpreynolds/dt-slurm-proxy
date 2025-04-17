@@ -20,13 +20,17 @@ def ssh_client() -> paramiko.SSHClient:
         paramiko.SSHClient: An SSH client object configured to connect to the SLURM scheduler.
     """
     ssh_client = paramiko.SSHClient()
+    ssh_client.load_system_host_keys()
     ssh_client.set_missing_host_key_policy(paramiko.AutoAddPolicy())
     return ssh_client
 
 
 def ssh_client_exec(ssh_client: paramiko.SSHClient, cmd: str) -> tuple:
     """
-    Execute a command on the SLURM scheduler via SSH.
+    Execute a command on the SLURM scheduler via SSH. 
+    
+    The private key for the SSH connection is obtained via the SSH agent.
+
     This function uses the provided SSH client to execute a command on
     the SLURM scheduler and returns the output and error streams.
 
@@ -40,18 +44,20 @@ def ssh_client_exec(ssh_client: paramiko.SSHClient, cmd: str) -> tuple:
     from constants import (
         SSH_HOSTNAME,
         SSH_USERNAME,
-        SSH_KEY,
     )
 
-    ssh_client.connect(
-        hostname=SSH_HOSTNAME,
-        username=SSH_USERNAME,
-        pkey=SSH_KEY,
-        look_for_keys=False,
-        allow_agent=True,
-        timeout=10,
-    )
-    return ssh_client.exec_command(cmd)
+    try:
+        ssh_client.connect(
+            hostname=SSH_HOSTNAME,
+            username=SSH_USERNAME,
+            allow_agent=True,
+            look_for_keys=True,
+            timeout=10,
+        )
+        return ssh_client.exec_command(cmd)
+    except paramiko.AuthenticationException as err:
+        print(f" * SSH authentication failed: {err}", file=sys.stderr)
+        sys.exit(-1)
 
 
 def init_mongodb() -> None:
@@ -81,9 +87,9 @@ def ping_mongodb_client(client: pymongo.MongoClient, uri: str) -> None:
     """
     try:
         client.admin.command("ping")
-        print(f" * MongoDB running on {uri}")
+        print(f" * MongoDB running on {uri}", file=sys.stderr)
     except pymongo.errors.ConnectionFailure as err:
-        print(f" * MongoDB connection failed - is the server running?\nError: {err}")
+        print(f" * MongoDB connection failed - is the server running?\nError: {err}", file=sys.stderr)
         sys.exit(-1)
 
 

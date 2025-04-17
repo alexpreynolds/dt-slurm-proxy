@@ -1,5 +1,6 @@
 # -*- coding: utf-8 -*-
 
+import sys
 import pymongo
 import paramiko
 from flask import (
@@ -189,7 +190,7 @@ def monitor_new_slurm_job(job: dict) -> bool:
         else SLURM_STATE_UNKNOWN
     )
     slurm_job_task_metadata = job["task"]
-    # update the monitor database with the job information
+    # print(f" * Adding job to monitor database: {slurm_job_id} | {slurm_job_state}", file=sys.stderr)
     result = add_job_to_monitor_db(
         slurm_job_id, slurm_job_state, slurm_job_task_metadata
     )
@@ -230,10 +231,9 @@ def add_job_to_monitor_db(
         jobs_coll = MONGODB_JOBS_COLLECTION
         if not jobs_coll.find_one({"slurm_job_id": slurm_job_id}):
             jobs_coll.insert_one(job)
-        # print(job)
         return True
     except pymongo.errors.PyMongoError as err:
-        print(f" * Error adding job to monitor database: {err}")
+        print(f" * Error adding job to monitor database: {err}", file=sys.stderr)
         return False
 
 
@@ -260,7 +260,7 @@ def get_job_metadata_from_monitor_db(slurm_job_id: int) -> dict:
         else:
             return None
     except pymongo.errors.PyMongoError as err:
-        print(f" * Error retrieving job information from monitor database: {err}")
+        print(f" * Error retrieving job information from monitor database: {err}", file=sys.stderr)
         return None
 
 
@@ -287,7 +287,7 @@ def update_job_state_in_monitor_db(slurm_job_id: int, new_slurm_job_state: str) 
             return False
         return True
     except pymongo.errors.PyMongoError as err:
-        print(f" * Error updating job state in monitor database: {err}")
+        print(f" * Error updating job state in monitor database: {err}", file=sys.stderr)
         return False
 
 
@@ -308,7 +308,7 @@ def remove_job_from_monitor_db_by_slurm_job_id(slurm_job_id: int) -> bool:
             return False
         return True
     except pymongo.errors.PyMongoError as err:
-        print(f" * Error removing job from monitor database: {err}")
+        print(f" * Error removing job from monitor database: {err}", file=sys.stderr)
         return False
 
 
@@ -327,7 +327,7 @@ def remove_and_return_job_from_monitor_db_by_slurm_job_id(slurm_job_id: int) -> 
         result = jobs_coll.find_one_and_delete({"slurm_job_id": slurm_job_id})
         return result
     except pymongo.errors.PyMongoError as err:
-        print(f" * Error removing job from monitor database: {err}")
+        print(f" * Error removing job from monitor database: {err}", file=sys.stderr)
         return None
 
 
@@ -441,12 +441,14 @@ def poll_slurm_jobs() -> None:
     the job status if there are any changes. If a job is marked as finished, a state
     change event is triggered.
     """
+    # print(" * Polling SLURM jobs...", file=sys.stderr)
     try:
         jobs_coll = MONGODB_JOBS_COLLECTION
         jobs = jobs_coll.find()
         for job in jobs:
             slurm_job_id = int(job["slurm_job_id"])
             monitor_db_job_state = job["slurm_job_state"]
+            # print(f'poll: testing {slurm_job_id} | {monitor_db_job_state}', file=sys.stderr)
             if monitor_db_job_state in SLURM_STATE_END_STATES:
                 # job is already completed, therefore no need to check its state
                 continue
@@ -454,7 +456,6 @@ def poll_slurm_jobs() -> None:
                 slurm_job_id
             )
             current_slurm_job_state = slurm_job_status_metadata["state"]
-            # print(f'poll: testing {slurm_job_id}')
             if monitor_db_job_state != current_slurm_job_state:
                 new_slurm_job_state = (
                     current_slurm_job_state
@@ -467,7 +468,7 @@ def poll_slurm_jobs() -> None:
                     )
                 update_job_state_in_monitor_db(slurm_job_id, new_slurm_job_state)
     except pymongo.errors.PyMongoError as err:
-        print(f" * Error polling SLURM jobs: {err}")
+        print(f" * Error polling SLURM jobs: {err}", file=sys.stderr)
 
 
 def process_job_state_change(
@@ -488,10 +489,11 @@ def process_job_state_change(
         new_slurm_job_state (str): The new SLURM job state.
     """
     print(
-        f" * Processing job state change: {slurm_job_id}: {old_slurm_job_state} -> {new_slurm_job_state}"
+        f" * Processing job state change: {slurm_job_id}: {old_slurm_job_state} -> {new_slurm_job_state}",
+        file=sys.stderr
     )
     if new_slurm_job_state in SLURM_STATE_END_STATES:
-        # print(f" * Sending notification message for job {slurm_job_id}")
+        # print(f" * Sending notification message for job {slurm_job_id}", file=sys.stderr)
         try:
             jobs_coll = MONGODB_JOBS_COLLECTION
             result = jobs_coll.find_one({"slurm_job_id": slurm_job_id})
@@ -503,26 +505,35 @@ def process_job_state_change(
                 # get the notification methods
                 task_notification_methods = task_notification["methods"]
                 task_notification_params = task_notification["params"]
-                msg = f"sending test notification for {slurm_job_id}!"
+                msg = f"Sending test notification for: {slurm_job_id}!"
                 for method in task_notification_methods:
-                    # print(f" * Sending notification message via method {method}")
+                    # print(f" * Sending notification message via method {method}", file=sys.stderr)
                     if method == NotificationCallbacks.EMAIL:
                         sender = task_notification_params["email"]["sender"]
                         recipient = task_notification_params["email"]["recipient"]
                         subject = task_notification_params["email"]["subject"]
                         body = msg
-                        method.value(sender, recipient, subject, body)
+                        try:
+                            method.value(sender, recipient, subject, body)
+                        except Exception as err:
+                            pass
                     elif method == NotificationCallbacks.SLACK:
-                        method.value(msg, task_notification_params["slack"]["channel"])
+                        try:
+                            method.value(msg, task_notification_params["slack"]["channel"])
+                        except Exception as err:
+                            pass
                     elif method == NotificationCallbacks.RABBITMQ:
-                        method.value(
-                            task_notification_params["rabbitmq"]["queue"],
-                            task_notification_params["rabbitmq"]["exchange"],
-                            task_notification_params["rabbitmq"]["routing_key"],
-                            msg,
-                        )
+                        try:
+                            method.value(
+                              task_notification_params["rabbitmq"]["queue"],
+                              task_notification_params["rabbitmq"]["exchange"],
+                              task_notification_params["rabbitmq"]["routing_key"],
+                              msg,
+                            )
+                        except Exception as err:
+                            pass
                     elif method == NotificationCallbacks.TEST:
                         method.value(msg)
         except pymongo.errors.PyMongoError as err:
-            print(f" * Error removing job from monitor database: {err}")
+            print(f" * Error removing job from monitor database: {err}", file=sys.stderr)
             return None
