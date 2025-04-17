@@ -9,6 +9,7 @@ parent, root = file.parent, file.parents[1]
 sys.path.append(str(root))
 from task_submission import task_submission
 
+
 class TestTaskSubmission(unittest.TestCase):
     def setUp(self):
         self.app = Flask(__name__)
@@ -38,7 +39,7 @@ class TestTaskSubmission(unittest.TestCase):
                 "name": "echo_hello_world",
                 "params": [
                     "-e",
-                    "\"Hello world!\t(sent to $USER)\n\"",
+                    '"Hello world!\t(sent to $USER)\n"',
                 ],
                 "uuid": "123e4567-e89b-12d3-a456-426614174000",
             }

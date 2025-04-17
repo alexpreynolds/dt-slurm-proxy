@@ -8,7 +8,11 @@ from pathlib import Path
 file = Path(__file__).resolve()
 parent, root = file.parent, file.parents[1]
 sys.path.append(str(root))
-from task_monitoring import task_monitoring, get_current_slurm_job_metadata_by_id, monitor_new_slurm_job
+from task_monitoring import (
+    task_monitoring,
+    get_current_slurm_job_metadata_by_id,
+    monitor_new_slurm_job,
+)
 from constants import SLURM_TEST_JOB_ID
 import helpers
 

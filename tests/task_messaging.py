@@ -15,16 +15,14 @@ from constants import (
     RABBITMQ_PATH,
 )
 
+
 class TestGetSlurmJobCompletionMessaging(unittest.TestCase):
     def test_rabbitmq_connection(self):
         # Setup RabbitMQ connection parameters
         rq_credentials = pika.PlainCredentials(RABBITMQ_USERNAME, RABBITMQ_PASSWORD)
         rq_connection = pika.BlockingConnection(
             pika.ConnectionParameters(
-                RABBITMQ_HOST,
-                RABBITMQ_PORT,
-                RABBITMQ_PATH,
-                rq_credentials
+                RABBITMQ_HOST, RABBITMQ_PORT, RABBITMQ_PATH, rq_credentials
             )
         )
         rq_channel = rq_connection.channel()

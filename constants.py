@@ -53,9 +53,12 @@ TASK_DESCRIPTION = {
 """
 Task submission methods
 """
+
+
 class TaskSubmitMethods(Enum):
     SSH = 1
     REST = 2
+
 
 """
 These parameters are used to connect to the SLURM scheduler via SSH. A private key is
@@ -137,5 +140,5 @@ SLURM_STATE = {
         "explanation": "A running job has been stopped with its cores retained.",
     },
 }
-SLURM_STATE_UNKNOWN = 'UNKNOWN'
+SLURM_STATE_UNKNOWN = "UNKNOWN"
 SLURM_STATE_END_STATES = ["COMPLETED", "FAILED", "CANCELLED", "SUSPENDED"]

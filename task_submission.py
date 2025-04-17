@@ -48,11 +48,11 @@ def post() -> Response:
     if submit_job_id == BAD_SLURM_JOB_ID:
         return stream_json_response({"error": "Failed to submit task"}, 400)
     # if successful, submit job metadata to the monitor service
-    job = { 
+    job = {
         "slurm_job_id": submit_job_id,
         "slurm_job_state": SLURM_STATE_UNKNOWN,
         "task": task,
-        }
+    }
     if not monitor_new_slurm_job(job):
         return stream_json_response({"error": "Failed to monitor job"}, 400)
     # return the task uuid back to the client

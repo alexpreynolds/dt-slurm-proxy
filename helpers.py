@@ -7,6 +7,7 @@ from flask import (
     stream_with_context,
 )
 
+
 def ssh_client() -> paramiko.SSHClient:
     """
     Create an SSH client to connect to the SLURM scheduler.
@@ -39,6 +40,7 @@ def ssh_client_exec(ssh_client: paramiko.SSHClient, cmd: str) -> tuple:
         SSH_USERNAME,
         SSH_KEY,
     )
+
     ssh_client.connect(
         hostname=SSH_HOSTNAME,
         username=SSH_USERNAME,
@@ -58,8 +60,9 @@ def init_mongodb() -> None:
         MONGODB_CLIENT,
         MONGODB_URI,
     )
+
     ping_mongodb_client(MONGODB_CLIENT, MONGODB_URI)
-    
+
 
 def ping_mongodb_client(client: pymongo.MongoClient, uri: str) -> None:
     """

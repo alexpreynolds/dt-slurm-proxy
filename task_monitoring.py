@@ -62,11 +62,15 @@ def monitor_new_slurm_job(job: dict) -> bool:
         bool: True if the job was successfully monitored, False otherwise.
     """
     slurm_job_id = int(job["slurm_job_id"])
-    slurm_job_status_metadata = get_current_slurm_job_metadata_by_slurm_job_id(slurm_job_id)
+    slurm_job_status_metadata = get_current_slurm_job_metadata_by_slurm_job_id(
+        slurm_job_id
+    )
     if not slurm_job_status_metadata:
         return False
     slurm_job_state = (
-        slurm_job_status_metadata["state"] if slurm_job_status_metadata else SLURM_STATE_UNKNOWN
+        slurm_job_status_metadata["state"]
+        if slurm_job_status_metadata
+        else SLURM_STATE_UNKNOWN
     )
     if slurm_job_state in SLURM_STATE_END_STATES:
         # job is already completed, therefore no need to monitor and we send a notification msg
@@ -97,7 +101,9 @@ def add_job_to_monitor_db(
         bool: True if the job was successfully added to the monitor database, False otherwise.
     """
     if slurm_job_state == SLURM_STATE_UNKNOWN:
-        current_slurm_job_metadata = get_current_slurm_job_metadata_by_slurm_job_id(slurm_job_id)
+        current_slurm_job_metadata = get_current_slurm_job_metadata_by_slurm_job_id(
+            slurm_job_id
+        )
         if current_slurm_job_metadata:
             slurm_job_state = current_slurm_job_metadata["state"]
     job = {
@@ -143,9 +149,7 @@ def get_job_metadata_from_monitor_db(slurm_job_id: int) -> dict:
         return None
 
 
-def update_job_state_in_monitor_db(
-    slurm_job_id: int, new_slurm_job_state: str
-) -> bool:
+def update_job_state_in_monitor_db(slurm_job_id: int, new_slurm_job_state: str) -> bool:
     """
     Update the job state key in the monitor database.
     The job dictionary should contain the SLURM job ID and task information.
@@ -307,7 +311,7 @@ def process_job_state_change(
     Handle the job state change here. This would be typically called when the
     job state becomes one of e.g., COMPLETED, FAILED, or CANCELLED. This may involve
     sending a notification message to the queue, for instance.
-    
+
     This function is a placeholder and should be implemented to send the message
     to the appropriate notification service, if required.
 
@@ -316,7 +320,9 @@ def process_job_state_change(
         old_slurm_job_state (str): The old SLURM job state.
         new_slurm_job_state (str): The new SLURM job state.
     """
-    print(f" * Processing job state change: {slurm_job_id}: {old_slurm_job_state} -> {new_slurm_job_state}")
+    print(
+        f" * Processing job state change: {slurm_job_id}: {old_slurm_job_state} -> {new_slurm_job_state}"
+    )
     pass
 
 
@@ -333,12 +339,16 @@ def get_job_metadata_by_slurm_job_id(slurm_job_id: str) -> Response:
         Response: A Flask Response object containing the job metadata in JSON format.
     """
     slurm_job_id = int(slurm_job_id)
-    slurm_job_status_metadata = get_current_slurm_job_metadata_by_slurm_job_id(slurm_job_id)
+    slurm_job_status_metadata = get_current_slurm_job_metadata_by_slurm_job_id(
+        slurm_job_id
+    )
     monitor_db_job_metadata = get_job_metadata_from_monitor_db(slurm_job_id)
     if not slurm_job_status_metadata and not monitor_db_job_metadata:
         return {"error": "Job information not found"}, 404
     slurm_job_state = (
-        slurm_job_status_metadata["state"] if slurm_job_status_metadata else SLURM_STATE_UNKNOWN
+        slurm_job_status_metadata["state"]
+        if slurm_job_status_metadata
+        else SLURM_STATE_UNKNOWN
     )
     response_data = {
         "slurm": {
