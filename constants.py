@@ -1,30 +1,16 @@
+# -*- coding: utf-8 -*-
+
 import os
 import pymongo
 import paramiko
 from enum import Enum
+from task_notification import NotificationCallbacks
 
 """
 Application name and port
 """
 APP_NAME = os.environ.get("NAME", "dt-slurm-proxy")
 APP_PORT = os.environ.get("PORT", 5001)
-
-"""
-RabbitMQ connection parameters
-
-The defaults point to a local instance of a test RabbitMQ server, which is only
-for test use.
-
-Specific parameters should be passed in as environment variables, which reflect
-the configuration of the organization's RabbitMQ server. Please see: 
-https://github.com/Altius/messaging for more details on host, port, username,
-password, path and other parameters.
-"""
-RABBITMQ_HOST = os.environ.get("RABBITMQ_HOST", "localhost")
-RABBITMQ_PORT = os.environ.get("RABBITMQ_PORT", 5672)
-RABBITMQ_USERNAME = os.environ.get("RABBITMQ_USERNAME", "guest")
-RABBITMQ_PASSWORD = os.environ.get("RABBITMQ_PASSWORD", "guest")
-RABBITMQ_PATH = os.environ.get("RABBITMQ_PATH", "/")
 
 """
 These parameters are used to define the tasks that can be submitted to the SLURM scheduler
@@ -41,12 +27,38 @@ command.
 The `notification_queue` parameter is the name of the RabbitMQ queue that will be used to
 send notifications about a completed task. This queue name should be specific to the task.
 """
-TASK_DESCRIPTION = {
+TASK_METADATA = {
     "echo_hello_world": {
         "cmd": "echo",
         "default_params": [],
         "description": "Prints a generic hello world! message",
-        "notification_queue": "hello",
+        "notification": {
+            "methods": [
+                NotificationCallbacks.TEST,
+                NotificationCallbacks.EMAIL,
+                NotificationCallbacks.SLACK,
+                NotificationCallbacks.RABBITMQ,
+            ],
+            "params": {
+                "test": None,
+                "email": {
+                    "sender": "areynolds@altius.org",
+                    "recipient": "areynolds@altius.org",
+                    "subject": "Hello World",
+                    "body": "Hello World!",
+                },
+                "slack": {
+                    "msg": "Hello World!",
+                    "channel": "general",
+                },
+                "rabbitmq": {
+                    "queue": "hello_world_queue",
+                    "exchange": "",
+                    "routing_key": "hello_world",
+                    "body": "Hello World!",
+                },
+            },
+        },
     },
 }
 
@@ -59,6 +71,47 @@ class TaskSubmitMethods(Enum):
     SSH = 1
     REST = 2
 
+
+"""
+RabbitMQ connection parameters
+
+The defaults point to a local instance of a test RabbitMQ server, which is only
+for test use.
+
+Specific parameters should be passed in as environment variables, which reflect
+the configuration of the organization's RabbitMQ server. Please see: 
+https://github.com/Altius/messaging for more details on host, port, username,
+password, path and other parameters.
+"""
+NOTIFICATIONS_RABBITMQ_HOST = os.environ.get("RABBITMQ_HOST", "localhost")
+NOTIFICATIONS_RABBITMQ_PORT = os.environ.get("RABBITMQ_PORT", 5672)
+NOTIFICATIONS_RABBITMQ_USERNAME = os.environ.get("RABBITMQ_USERNAME", "guest")
+NOTIFICATIONS_RABBITMQ_PASSWORD = os.environ.get("RABBITMQ_PASSWORD", "guest")
+NOTIFICATIONS_RABBITMQ_PATH = os.environ.get("RABBITMQ_PATH", "/")
+
+"""
+SMTP service parameters
+
+If smtp.gmail.com is used, the username and password should be set to the
+Gmail account used to send the email. The password should be an app password or token
+generated for the account. See https://support.google.com/accounts/answer/185201?hl=en
+for more details on how to generate an app password.
+"""
+NOTIFICATIONS_SMTP_SERVER = os.environ.get("SMTP_SERVER", "smtp.example.com")
+NOTIFICATIONS_SMTP_PORT = os.environ.get("SMTP_PORT", 587)
+NOTIFICATIONS_SMTP_USERNAME = os.environ.get("SMTP_USERNAME", "username@example.com")
+NOTIFICATIONS_SMTP_PASSWORD = os.environ.get("SMTP_PASSWORD", "api_token")
+
+"""
+Slack service parameters
+
+Tokens should be created for the bot user that will be used to send messages to the Slack
+channel. The channel should be the name of the channel that the bot user is a member of.
+The token should be a bot token, which can be created in the Slack API console, described
+here: https://api.slack.com/tutorials/tracks/getting-a-token
+"""
+NOTIFICATIONS_SLACK_BOT_TOKEN = os.environ.get("SLACK_BOT_TOKEN", "api_token")
+NOTIFICATIONS_SLACK_CHANNEL = os.environ.get("SLACK_CHANNEL", "channel_name")
 
 """
 These parameters are used to connect to the SLURM scheduler via SSH. A private key is

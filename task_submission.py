@@ -1,3 +1,5 @@
+# -*- coding: utf-8 -*-
+
 import os
 from flask import (
     Blueprint,
@@ -10,7 +12,7 @@ from helpers import (
     stream_json_response,
 )
 from constants import (
-    TASK_DESCRIPTION,
+    TASK_METADATA,
     BAD_SLURM_JOB_ID,
     SLURM_STATE_UNKNOWN,
     TaskSubmitMethods,
@@ -155,11 +157,11 @@ def define_task_cmd(task_name: str, task_params: list) -> str:
     Returns:
         str: The full command for the task, or None if the task is not defined.
     """
-    if task_name not in TASK_DESCRIPTION:
+    if task_name not in TASK_METADATA:
         print(f" * Task {task_name} is not defined")
         return None
-    task_cmd = [TASK_DESCRIPTION[task_name]["cmd"]]
-    for default_param in TASK_DESCRIPTION[task_name]["default_params"]:
+    task_cmd = [TASK_METADATA[task_name]["cmd"]]
+    for default_param in TASK_METADATA[task_name]["default_params"]:
         task_cmd.append(default_param)
     for additional_param in task_params:
         task_cmd.append(additional_param)
