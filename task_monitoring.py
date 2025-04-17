@@ -1,4 +1,5 @@
 import pymongo
+import paramiko
 from flask import (
     Blueprint,
     request,
@@ -6,7 +7,9 @@ from flask import (
 )
 from helpers import ssh_client, ssh_client_exec, stream_json_response
 from constants import (
-    SLURM_STATUS,
+    SLURM_STATE,
+    SLURM_STATE_UNKNOWN,
+    SLURM_STATE_END_STATES,
     SLURM_TEST_JOB_ID,
     SLURM_TEST_JOB_STATUS,
     MONGODB_JOBS_COLLECTION,
@@ -14,7 +17,7 @@ from constants import (
 
 SSH_CLIENT = ssh_client()
 
-SLURM_STATUS_KEYS = SLURM_STATUS.keys()
+SLURM_STATES_ALLOWED = SLURM_STATE.keys()
 
 task_monitoring = Blueprint("task_monitoring", __name__)
 
@@ -51,7 +54,7 @@ def monitor_new_slurm_job(job: dict) -> bool:
     """
     Monitor a new SLURM job by adding it to the database.
     The job dictionary should contain the SLURM job ID and task information.
-    The SLURM job status is retrieved from the SLURM scheduler.
+    The SLURM job state is retrieved from the SLURM scheduler.
 
     Args:
         job (dict): A dictionary containing the SLURM job ID and task information.
@@ -59,22 +62,26 @@ def monitor_new_slurm_job(job: dict) -> bool:
         bool: True if the job was successfully monitored, False otherwise.
     """
     slurm_job_id = int(job["slurm_job_id"])
-    slurm_job_status_metadata = get_current_slurm_job_metadata_by_id(slurm_job_id)
+    slurm_job_status_metadata = get_current_slurm_job_metadata_by_slurm_job_id(slurm_job_id)
     if not slurm_job_status_metadata:
         return False
-    slurm_job_status = (
-        slurm_job_status_metadata["state"] if slurm_job_status_metadata else "Unknown"
+    slurm_job_state = (
+        slurm_job_status_metadata["state"] if slurm_job_status_metadata else SLURM_STATE_UNKNOWN
     )
+    if slurm_job_state in SLURM_STATE_END_STATES:
+        # job is already completed, therefore no need to monitor and we send a notification msg
+        process_job_state_change(slurm_job_id, SLURM_STATE_UNKNOWN, slurm_job_state)
+        return True
     slurm_job_task_metadata = job["task"]
     # update the monitor database with the job information
     result = add_job_to_monitor_db(
-        slurm_job_id, slurm_job_status, slurm_job_task_metadata
+        slurm_job_id, slurm_job_state, slurm_job_task_metadata
     )
     return result
 
 
 def add_job_to_monitor_db(
-    slurm_job_id: int, slurm_job_status: str, slurm_job_task_metadata: dict
+    slurm_job_id: int, slurm_job_state: str, slurm_job_task_metadata: dict
 ) -> bool:
     """
     Add a new job to the monitor database.
@@ -83,21 +90,26 @@ def add_job_to_monitor_db(
 
     Args:
         slurm_job_id (int): The SLURM job ID.
-        slurm_job_status (str): The SLURM job status.
+        slurm_job_state (str): The SLURM job state.
         slurm_job_task_metadata (dict): The task metadata for the job.
 
     Returns:
         bool: True if the job was successfully added to the monitor database, False otherwise.
     """
+    if slurm_job_state == SLURM_STATE_UNKNOWN:
+        current_slurm_job_metadata = get_current_slurm_job_metadata_by_slurm_job_id(slurm_job_id)
+        if current_slurm_job_metadata:
+            slurm_job_state = current_slurm_job_metadata["state"]
     job = {
         "slurm_job_id": slurm_job_id,
-        "slurm_job_status": slurm_job_status,
+        "slurm_job_state": slurm_job_state,
         "task": slurm_job_task_metadata,
     }
     try:
         jobs_coll = MONGODB_JOBS_COLLECTION
         if not jobs_coll.find_one({"slurm_job_id": slurm_job_id}):
             jobs_coll.insert_one(job)
+        print(job)
         return True
     except pymongo.errors.PyMongoError as err:
         print(f" * Error adding job to monitor database: {err}")
@@ -120,7 +132,7 @@ def get_job_metadata_from_monitor_db(slurm_job_id: int) -> dict:
         if result:
             job_metadata = {
                 "slurm_job_id": result["slurm_job_id"],
-                "slurm_job_status": result["slurm_job_status"],
+                "slurm_job_state": result["slurm_job_state"],
                 "task": result["task"],
             }
             return job_metadata
@@ -131,36 +143,36 @@ def get_job_metadata_from_monitor_db(slurm_job_id: int) -> dict:
         return None
 
 
-def update_job_status_in_monitor_db(
-    slurm_job_id: int, new_slurm_job_status: str
+def update_job_state_in_monitor_db(
+    slurm_job_id: int, new_slurm_job_state: str
 ) -> bool:
     """
-    Update the job status in the monitor database.
+    Update the job state key in the monitor database.
     The job dictionary should contain the SLURM job ID and task information.
-    The SLURM job status is retrieved from the SLURM scheduler.
+    The SLURM job state is retrieved from the SLURM scheduler.
 
     Args:
         slurm_job_id (int): The SLURM job ID.
-        new_slurm_job_status (str): The new SLURM job status.
+        new_slurm_job_state (str): The new SLURM job state.
 
     Returns:
-        bool: True if the job status was successfully updated, False otherwise.
+        bool: True if the job state was successfully updated, False otherwise.
     """
     try:
         jobs_coll = MONGODB_JOBS_COLLECTION
         result = jobs_coll.update_one(
             {"slurm_job_id": slurm_job_id},
-            {"$set": {"slurm_job_status": new_slurm_job_status}},
+            {"$set": {"slurm_job_state": new_slurm_job_state}},
         )
         if result.modified_count == 0:
             return False
         return True
     except pymongo.errors.PyMongoError as err:
-        print(f" * Error updating job status in monitor database: {err}")
+        print(f" * Error updating job state in monitor database: {err}")
         return False
 
 
-def remove_job_from_monitor_db(slurm_job_id: int) -> bool:
+def remove_job_from_monitor_db_by_slurm_job_id(slurm_job_id: int) -> bool:
     """
     Remove a job from the monitor database using the SLURM job ID.
 
@@ -181,7 +193,7 @@ def remove_job_from_monitor_db(slurm_job_id: int) -> bool:
         return False
 
 
-def remove_and_return_job_from_monitor_db(slurm_job_id: int) -> dict:
+def remove_and_return_job_from_monitor_db_by_slurm_job_id(slurm_job_id: int) -> dict:
     """
     Remove a job from the monitor database and return the job metadata.
 
@@ -200,7 +212,7 @@ def remove_and_return_job_from_monitor_db(slurm_job_id: int) -> dict:
         return None
 
 
-def get_current_slurm_job_metadata_by_id(slurm_job_id: int) -> dict:
+def get_current_slurm_job_metadata_by_slurm_job_id(slurm_job_id: int) -> dict:
     """
     Get the current SLURM job metadata by job ID.
 
@@ -245,8 +257,8 @@ def get_current_slurm_job_metadata_by_id(slurm_job_id: int) -> dict:
         "elapsed",
     ]
     job_status = dict(zip(job_status_keys, job_status_components))
-    if job_status["state"] not in SLURM_STATUS_KEYS:
-        job_status["state"] = "Unknown"
+    if job_status["state"] not in SLURM_STATES_ALLOWED:
+        job_status["state"] = SLURM_STATE_UNKNOWN
     return job_status
 
 
@@ -262,45 +274,49 @@ def poll_slurm_jobs() -> None:
         jobs = jobs_coll.find()
         for job in jobs:
             slurm_job_id = int(job["slurm_job_id"])
-            monitordb_job_status = job["slurm_job_status"]
-            slurm_job_status_metadata = get_current_slurm_job_metadata_by_id(
+            monitor_db_job_state = job["slurm_job_state"]
+            slurm_job_status_metadata = get_current_slurm_job_metadata_by_slurm_job_id(
                 slurm_job_id
             )
-            current_slurm_job_status = slurm_job_status_metadata["state"]
+            current_slurm_job_state = slurm_job_status_metadata["state"]
             # print(f'poll: testing {slurm_job_id}')
             if not slurm_job_status_metadata:
-                remove_job_from_monitor_db(slurm_job_id)
+                remove_job_from_monitor_db_by_slurm_job_id(slurm_job_id)
                 continue
-            if monitordb_job_status != current_slurm_job_status:
-                new_slurm_job_status = (
-                    current_slurm_job_status
-                    if current_slurm_job_status in SLURM_STATUS_KEYS
-                    else "Unknown"
+            if monitor_db_job_state != current_slurm_job_state:
+                new_slurm_job_state = (
+                    current_slurm_job_state
+                    if current_slurm_job_state in SLURM_STATES_ALLOWED
+                    else SLURM_STATE_UNKNOWN
                 )
-                if new_slurm_job_status in ["COMPLETED", "FAILED", "CANCELLED"]:
-                    send_status_update_to_notification_queue(
-                        slurm_job_id, monitordb_job_status, new_slurm_job_status
+                if new_slurm_job_state in SLURM_STATE_END_STATES:
+                    process_job_state_change(
+                        slurm_job_id, monitor_db_job_state, new_slurm_job_state
                     )
-                    remove_job_from_monitor_db(slurm_job_id)
+                    remove_job_from_monitor_db_by_slurm_job_id(slurm_job_id)
                 else:
-                    update_job_status_in_monitor_db(slurm_job_id, new_slurm_job_status)
+                    update_job_state_in_monitor_db(slurm_job_id, new_slurm_job_state)
     except pymongo.errors.PyMongoError as err:
         print(f" * Error polling SLURM jobs: {err}")
 
 
-def send_status_update_to_notification_queue(
-    slurm_job_id: int, old_slurm_job_status: str, new_slurm_job_status: str
+def process_job_state_change(
+    slurm_job_id: int, old_slurm_job_state: str, new_slurm_job_state: str
 ) -> None:
     """
-    Send a message to the notification queue with the job status update.
+    Handle the job state change here. This would be typically called when the
+    job state becomes one of e.g., COMPLETED, FAILED, or CANCELLED. This may involve
+    sending a notification message to the queue, for instance.
+    
     This function is a placeholder and should be implemented to send the message
-    to the appropriate notification service.
+    to the appropriate notification service, if required.
 
     Args:
         slurm_job_id (int): The SLURM job ID.
-        old_slurm_job_status (str): The old SLURM job status.
-        new_slurm_job_status (str): The new SLURM job status.
+        old_slurm_job_state (str): The old SLURM job state.
+        new_slurm_job_state (str): The new SLURM job state.
     """
+    print(f" * Processing job state change: {slurm_job_id}: {old_slurm_job_state} -> {new_slurm_job_state}")
     pass
 
 
@@ -317,38 +333,36 @@ def get_job_metadata_by_slurm_job_id(slurm_job_id: str) -> Response:
         Response: A Flask Response object containing the job metadata in JSON format.
     """
     slurm_job_id = int(slurm_job_id)
-    slurm_job_status_metadata = get_current_slurm_job_metadata_by_id(slurm_job_id)
-    monitordb_job_metadata = get_job_metadata_from_monitor_db(slurm_job_id)
-    if not slurm_job_status_metadata and not monitordb_job_metadata:
+    slurm_job_status_metadata = get_current_slurm_job_metadata_by_slurm_job_id(slurm_job_id)
+    monitor_db_job_metadata = get_job_metadata_from_monitor_db(slurm_job_id)
+    if not slurm_job_status_metadata and not monitor_db_job_metadata:
         return {"error": "Job information not found"}, 404
-    slurm_job_status = (
-        slurm_job_status_metadata["state"] if slurm_job_status_metadata else "Unknown"
+    slurm_job_state = (
+        slurm_job_status_metadata["state"] if slurm_job_status_metadata else SLURM_STATE_UNKNOWN
     )
     response_data = {
         "slurm": {
             "job_id": slurm_job_id,
-            "job_status": slurm_job_status,
+            "job_state": slurm_job_state,
         },
-        "monitordb": {
-            "md": monitordb_job_metadata,
-        },
+        "monitor": monitor_db_job_metadata,
     }
     response = stream_json_response(response_data, 200)
     return response
 
 
-def get_slurm_jobs_metadata_by_status(slurm_job_status: str) -> dict:
+def get_slurm_jobs_metadata_by_slurm_job_state(slurm_job_state: str) -> dict:
     """
-    Get SLURM job metadata by job status.
-    The job status is passed as a URL parameter.
+    Get SLURM job metadata by job state.
+    The job state is passed as a URL parameter.
 
     Args:
-        slurm_job_status (str): The SLURM job status.
+        slurm_job_state (str): The SLURM job state.
 
     Returns:
-        dict: A dictionary containing the job metadata for the given status.
+        dict: A dictionary containing the job metadata for the given state.
     """
-    if not slurm_job_status:
+    if not slurm_job_state:
         return None
     cmd = " ".join(
         [
@@ -356,7 +370,7 @@ def get_slurm_jobs_metadata_by_status(slurm_job_status: str) -> dict:
             for x in [
                 "sacct",
                 "--state",
-                slurm_job_status,
+                slurm_job_state,
                 "--format=JobID,Jobname%-128,state,User,partition,time,start,end,elapsed",
                 "--noheader",
                 "--parsable2",
@@ -382,34 +396,34 @@ def get_slurm_jobs_metadata_by_status(slurm_job_status: str) -> dict:
             "elapsed",
         ]
         job_status_instance = dict(zip(job_status_keys, job_status_components))
-        if job_status_instance["state"] not in SLURM_STATUS_KEYS:
-            job_status_instance["state"] = "Unknown"
+        if job_status_instance["state"] not in SLURM_STATES_ALLOWED:
+            job_status_instance["state"] = SLURM_STATE_UNKNOWN
         jobs_status["jobs"].append(job_status_instance)
     return jobs_status
 
 
-@task_monitoring.route("/slurm_status/<slurm_status>", methods=["GET"])
-def get_by_slurm_status(slurm_status: str) -> Response:
+@task_monitoring.route("/slurm_job_state/<slurm_job_state>", methods=["GET"])
+def get_by_slurm_job_state(slurm_job_state: str) -> Response:
     """
-    GET request to retrieve job metadata from the monitor database using the SLURM job status.
-    The job status is passed as a URL parameter.
+    GET request to retrieve job metadata from the monitor database using the SLURM job state.
+    The job state is passed as a URL parameter.
 
     Args:
-        slurm_status (str): The SLURM job status.
+        slurm_job_state (str): The SLURM job state.
 
     Returns:
         Response: A Flask Response object containing the job metadata in JSON format.
     """
-    if slurm_status not in SLURM_STATUS_KEYS:
-        return {"error": "Invalid status key"}, 400
-    # also query the database for jobs with the given status, for comparison
-    jobs = get_slurm_jobs_metadata_by_status(slurm_status)
+    if slurm_job_state not in SLURM_STATES_ALLOWED:
+        return {"error": "Invalid state key"}, 400
+    # also query the database for jobs with the given state, for comparison
+    jobs = get_slurm_jobs_metadata_by_slurm_job_state(slurm_job_state)
     response = stream_json_response(jobs, 200)
     return response
 
 
 @task_monitoring.route("/slurm_job_id/<slurm_job_id>", methods=["DELETE"])
-def delete(slurm_job_id: int) -> Response:
+def delete_by_slurm_job_id(slurm_job_id: int) -> Response:
     """
     DELETE request to remove a job from the monitor database using the SLURM job ID.
     The job ID is passed as a URL parameter.
@@ -458,7 +472,7 @@ def delete(slurm_job_id: int) -> Response:
         )
         return response
     # delete the job from the database
-    deleted_job = remove_and_return_job_from_monitor_db(slurm_job_id)
+    deleted_job = remove_and_return_job_from_monitor_db_by_slurm_job_id(slurm_job_id)
     # return the job object
     response = stream_json_response(deleted_job, 200)
     return response

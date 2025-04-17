@@ -50,6 +50,17 @@ def ssh_client_exec(ssh_client: paramiko.SSHClient, cmd: str) -> tuple:
     return ssh_client.exec_command(cmd)
 
 
+def init_mongodb() -> None:
+    """
+    Initialize the MongoDB client and ping it to check if it is connected.
+    """
+    from constants import (
+        MONGODB_CLIENT,
+        MONGODB_URI,
+    )
+    ping_mongodb_client(MONGODB_CLIENT, MONGODB_URI)
+    
+
 def ping_mongodb_client(client: pymongo.MongoClient, uri: str) -> None:
     """
     Ping the MongoDB client to check if it is connected.
@@ -67,7 +78,7 @@ def ping_mongodb_client(client: pymongo.MongoClient, uri: str) -> None:
         client.admin.command("ping")
         print(f" * MongoDB running on {uri}")
     except pymongo.errors.ConnectionFailure as err:
-        print(f" * MongoDB connection failed: {err}")
+        print(f" * MongoDB connection failed - is the server running?\nError: {err}")
         sys.exit(-1)
 
 

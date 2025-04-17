@@ -10,12 +10,16 @@ from constants import (
     APP_PORT,
     MONITOR_POLLING_INTERVAL,
 )
+from helpers import (
+    init_mongodb,
+)
 
 app = Flask(APP_NAME)
 app.register_blueprint(task_submission, url_prefix="/submit")
 app.register_blueprint(task_monitoring, url_prefix="/monitor")
 
 if __name__ == "__main__":
+    init_mongodb()
     scheduler = BackgroundScheduler()
     poll_scheduler = scheduler.add_job(
         poll_slurm_jobs,
