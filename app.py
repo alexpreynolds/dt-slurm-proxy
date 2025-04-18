@@ -18,6 +18,10 @@ app = Flask(APP_NAME)
 app.register_blueprint(task_submission, url_prefix="/submit")
 app.register_blueprint(task_monitoring, url_prefix="/monitor")
 
+@app.route("/ping")
+def ping():
+    return "pong"
+
 if __name__ == "__main__":
     init_mongodb()
     scheduler = BackgroundScheduler()
@@ -28,4 +32,4 @@ if __name__ == "__main__":
     )
     scheduler.start()
     port = int(APP_PORT)
-    app.run(debug=True, threaded=True, host="0.0.0.0", port=port)
+    app.run(debug=False, threaded=True, host="0.0.0.0", port=port)

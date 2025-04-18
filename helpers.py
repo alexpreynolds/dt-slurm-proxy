@@ -1,5 +1,6 @@
 # -*- coding: utf-8 -*-
 
+import os
 import sys
 import pymongo
 import paramiko
@@ -44,17 +45,23 @@ def ssh_client_exec(ssh_client: paramiko.SSHClient, cmd: str) -> tuple:
     from constants import (
         SSH_HOSTNAME,
         SSH_USERNAME,
+        SSH_KEY,
     )
 
     try:
         ssh_client.connect(
             hostname=SSH_HOSTNAME,
             username=SSH_USERNAME,
-            allow_agent=True,
-            look_for_keys=True,
+            pkey=SSH_KEY,
+            look_for_keys=False,
+            allow_agent=False,
             timeout=10,
         )
         return ssh_client.exec_command(cmd)
+    except paramiko.SSHException as err:
+        print(f" * SSH connection failed: {err}", file=sys.stderr)
+        # print(f" * SSH_AUTH_SOCK={os.environ.get('SSH_AUTH_SOCK')}", file=sys.stderr)
+        sys.exit(-1)
     except paramiko.AuthenticationException as err:
         print(f" * SSH authentication failed: {err}", file=sys.stderr)
         sys.exit(-1)
