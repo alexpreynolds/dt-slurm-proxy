@@ -67,7 +67,7 @@ Task submission methods
 """
 
 
-class TaskSubmitMethods(Enum):
+class TaskCommunicationMethods(Enum):
     SSH = 1
     REST = 2
 

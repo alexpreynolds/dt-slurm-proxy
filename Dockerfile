@@ -14,9 +14,6 @@ RUN pip3 install --upgrade pip
 RUN pip3 install uwsgi
 RUN pip install -r requirements.txt
 
-#RUN useradd --no-create-home nginx
-#RUN adduser -H nginx
-#RUN rm /etc/nginx/sites-enabled/default
 RUN rm -r /root/.cache
 
 COPY nginx.conf /etc/nginx/
@@ -30,8 +27,5 @@ VOLUME /data/db
 EXPOSE 27017
 
 COPY *.py *.sh /app/
-
-# ENTRYPOINT [ "/bin/sh" ]
-# CMD [ "start.sh" ]
 
 CMD ["/usr/bin/supervisord"]

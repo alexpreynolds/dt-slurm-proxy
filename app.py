@@ -5,6 +5,7 @@ from apscheduler.schedulers.background import BackgroundScheduler
 
 from task_submission import task_submission
 from task_monitoring import task_monitoring, poll_slurm_jobs
+from task_slurm_rest import task_slurm_rest
 from constants import (
     APP_NAME,
     APP_PORT,
@@ -17,6 +18,7 @@ from helpers import (
 app = Flask(APP_NAME)
 app.register_blueprint(task_submission, url_prefix="/submit")
 app.register_blueprint(task_monitoring, url_prefix="/monitor")
+app.register_blueprint(task_slurm_rest, url_prefix="/slurm")
 
 @app.route("/ping")
 def ping():
@@ -32,4 +34,4 @@ if __name__ == "__main__":
     )
     scheduler.start()
     port = int(APP_PORT)
-    app.run(debug=False, threaded=True, host="0.0.0.0", port=port)
+    app.run(debug=True, threaded=True, host="0.0.0.0", port=port)

@@ -16,7 +16,7 @@ from constants import (
     TASK_METADATA,
     BAD_SLURM_JOB_ID,
     SLURM_STATE_UNKNOWN,
-    TaskSubmitMethods,
+    TaskCommunicationMethods,
 )
 from task_monitoring import monitor_new_slurm_job
 
@@ -47,7 +47,7 @@ def post() -> Response:
         return stream_json_response({"error": "No task provided"}, 400)
     if not is_task_valid(task):
         return stream_json_response({"error": "Invalid task format"}, 400)
-    submit_job_id = submit_slurm_task(task, TaskSubmitMethods.SSH)
+    submit_job_id = submit_slurm_task(task, TaskCommunicationMethods.SSH)
     if submit_job_id == BAD_SLURM_JOB_ID:
         return stream_json_response({"error": "Failed to submit task"}, 400)
     # if successful, submit job metadata to the monitor service
@@ -73,20 +73,23 @@ def submit_slurm_task(task: dict, submit_method: str) -> int:
     Args:
         task (dict): The task dictionary containing information about the task
             to be submitted.
-        method (str): The method to be used for task submission. Currently,
+        submit_method (str): The method to be used for task submission. Currently,
             only SSH is supported.
 
     Returns:
         int: The job ID of the submitted task, or BAD_SLURM_JOB_ID if the submission
             failed.
     """
-    if submit_method == TaskSubmitMethods.SSH:
+    if submit_method == TaskCommunicationMethods.SSH:
         cmd = define_sbatch_cmd_for_task_via_ssh(task)
         if not cmd:
             print(" * Failed to define sbatch command", file=sys.stderr)
             return BAD_SLURM_JOB_ID
         job_id = send_sbatch_cmd_via_ssh(cmd) if cmd else BAD_SLURM_JOB_ID
         return job_id
+    elif submit_method == TaskCommunicationMethods.REST:
+        print(f" * Unsupported task submit method: {submit_method}", file=sys.stderr)
+        return BAD_SLURM_JOB_ID
     else:
         print(f" * Unsupported task submit method: {submit_method}", file=sys.stderr)
         return BAD_SLURM_JOB_ID
